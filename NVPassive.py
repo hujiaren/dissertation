@@ -1,5 +1,7 @@
 # know bugs: does not work with proper nouns that end with 'ed' that is also preceded by 'e' plus another consonant, e.g. Chinesed'
+# need to seek out wrong labelling by assorting the false_tool.txt after querying
 import re
+import time
 import nltk
 from nltk.tokenize import word_tokenize,sent_tokenize
 from nltk.parse import CoreNLPParser
@@ -18,7 +20,7 @@ def ed_rip(word: str):
     pos_tagger = CoreNLPParser(url='http://localhost:9000', tagtype='pos')
     nlpinfo = nlp(word.lower())
     ripword = nlpinfo.sentences[0].words[0].lemma
-    # If the stem is a proper noun, the first letter will not be capilitalized. Hence recapitalization is needed.
+    # Recapitalization
     if re.search('^[A-Z]',word) != None:
         ripword = ripword.capitalize()
     # Return information needed to determine NV Passive.
@@ -27,7 +29,7 @@ def ed_rip(word: str):
     print(riptoken, riptag)
     if riptag.startswith('V') is True:
         NV = False
-    if riptag.startswith('N') is True:
+    elif riptag.startswith('N') is True:
         NV = True
     return (ripword, NV)
 
@@ -49,7 +51,7 @@ def passive_finder(wordnow,tagpos,words):
             return True
         else:
             return False
-    if tagpos == 1:
+    elif tagpos == 1:
         penultimate = words[tagpos-1]
         print('Analyzing:',penultimate,wordnow)
         print('copula_test:',copula_test(penultimate))
@@ -57,6 +59,8 @@ def passive_finder(wordnow,tagpos,words):
             return True
         else:
             return False
+    elif tagpos == 0:
+        return False
 
 def NV_Passive(tagged_sentence: list) -> tuple:
     ''' Main function to detect both Passive and NVPassive using a strict one-word intermediate rule.
@@ -77,7 +81,7 @@ def NV_Passive(tagged_sentence: list) -> tuple:
     for tagpos,tag in enumerate(tags):
         if tag == ('NNP' or 'NNPS'):
             NPlist.append((tagpos,tag))
-        if tag == 'VBN':
+        elif tag == 'VBN':
             VBNlist.append((tagpos,tag))
     if len(NPlist) != 0:
         for tagpos,tag in NPlist:
@@ -113,23 +117,21 @@ def NV_Passive(tagged_sentence: list) -> tuple:
         print('Result: The sentence is not a passive at all.')
     return (steminfo[0], passive, NVPassive)
 
-def write(sentence, result):
+def write(sentence: str, result):
     seqlst = list()
-    seqlst.append(sentence)
     for item in result:
         seqlst.append(str(item))
-    seqlst.append('\n')
-    seq = '\t'.join(seqlst)
+    seq = sentence + '\t' + '\t'.join(seqlst)
     if result[1] == False and result[2] == False:
-        file = open('False_pool.txt', 'a+')
+        file = open('False_pool_brown_news.txt', 'a+')
         file.write(seq)
         print('Sequence Written.')
-    if result[1] == True and result[2] == False:
-        file = open('Passive_pool.txt', 'a+')
+    elif result[1] == True and result[2] == False:
+        file = open('Passive_pool_brown_news.txt', 'a+')
         file.write(seq)
         print('Sequence Written.')
-    if result[1] == True and result[2] == True:
-        file = open('False_pool.txt', 'a+')
+    elif result[1] == True and result[2] == True:
+        file = open('True_pool_brown_news.txt', 'a+')
         file.write(seq)
         print('Sequence Written.')
     file.close()
