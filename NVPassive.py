@@ -1,29 +1,30 @@
 # know bugs: does not work with proper nouns that end with 'ed' that is also preceded by 'e' plus another consonant, e.g. Chinesed'
+import re
 import nltk
-from nltk.stem.snowball import SnowballStemmer
-from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize,sent_tokenize
 from nltk.parse import CoreNLPParser
+from nltk.corpus import brown
+import stanfordnlp
+nlp = stanfordnlp.Pipeline(processors='tokenize,mwt,pos,lemma')
+
+def process(text):
+    pos_tagger = CoreNLPParser(url='http://localhost:9000', tagtype='pos')
+    tags = pos_tagger.tag(text)
+    return tags
 
 # Rip the -ed suffix off of the past participle.
-def ed_rip(word):
+def ed_rip(word: str):
+    NV = False
     pos_tagger = CoreNLPParser(url='http://localhost:9000', tagtype='pos')
-    # Tokenize and tag the word.
-    token = nltk.word_tokenize(word)
-    tag = pos_tagger.tag(token)[0][1]
-    # Load both SnowballStemmer and WordNetLemmatizer for accurate ed stripping.
-    stemmer = SnowballStemmer('english')
-    lemmatizer = WordNetLemmatizer()
-    preprocessed = lemmatizer.lemmatize(word,'v')
-    ripword = stemmer.stem(preprocessed)
+    nlpinfo = nlp(word.lower())
+    ripword = nlpinfo.sentences[0].words[0].lemma
     # If the stem is a proper noun, the first letter will not be capilitalized. Hence recapitalization is needed.
-    if tag.startswith('NNP'):
-        ripword = ripword.capitalize()
-    elif word[:1].isalpha():
+    if re.search('^[A-Z]',word) != None:
         ripword = ripword.capitalize()
     # Return information needed to determine NV Passive.
     riptoken = nltk.word_tokenize(ripword)
     riptag = pos_tagger.tag(riptoken)[0][1]
+    print(riptoken, riptag)
     if riptag.startswith('V') is True:
         NV = False
     if riptag.startswith('N') is True:
@@ -43,7 +44,7 @@ def passive_finder(wordnow,tagpos,words):
         penultimate = words[tagpos-1]
         antipenultimate = words[tagpos-2]
         print('Analyzing:',antipenultimate,penultimate,wordnow)
-        print('copula_test:',copula_test(penultimate),copula_test(antipenultimate))
+        print('copula_test:',copula_test(antipenultimate),copula_test(penultimate))
         if (copula_test(penultimate) == True) or (copula_test(antipenultimate) == True):
             return True
         else:
@@ -64,7 +65,7 @@ def NV_Passive(tagged_sentence: list) -> tuple:
     # Prepare values to record passive and N-V.
     passive = False
     NVPassive = False
-    steminfo = ('not passive', False)
+    steminfo = ('notpassive', False)
     # Generate two sets of lists for words and tags.
     words = [wordtagpair[0] for wordtagpair in tagged_sentence]
     tags = [wordtagpair[1] for wordtagpair in tagged_sentence]
@@ -112,7 +113,27 @@ def NV_Passive(tagged_sentence: list) -> tuple:
         print('Result: The sentence is not a passive at all.')
     return (steminfo[0], passive, NVPassive)
 
-# Function test
+def write(sentence, result):
+    seqlst = list()
+    seqlst.append(sentence)
+    for item in result:
+        seqlst.append(str(item))
+    seqlst.append('\n')
+    seq = '\t'.join(seqlst)
+    if result[1] == False and result[2] == False:
+        file = open('False_pool.txt', 'a+')
+        file.write(seq)
+        print('Sequence Written.')
+    if result[1] == True and result[2] == False:
+        file = open('Passive_pool.txt', 'a+')
+        file.write(seq)
+        print('Sequence Written.')
+    if result[1] == True and result[2] == True:
+        file = open('False_pool.txt', 'a+')
+        file.write(seq)
+        print('Sequence Written.')
+    file.close()
+
 def test(sent_pool, t):
     pos_tagger = CoreNLPParser(url='http://localhost:9000', tagtype='pos')
     for s in sent_pool:
@@ -132,7 +153,7 @@ def test(sent_pool, t):
                 print('True test passed.')
             else: print('▇▇True test failed.')
 
-false_pool = sent_tokenize(
+""" false_pool = sent_tokenize(
     '''The corpus has been a great hit. Our favorited teacher had always been Fred. I have been on Twitter for a long time.'''
 )
 passive_pool = sent_tokenize(
@@ -146,4 +167,11 @@ true_pool = sent_tokenize(
 
 test(false_pool,'f')
 test(passive_pool,'p')
-test(true_pool,'t')
+test(true_pool,'t') """
+
+for s in brown.sents(categories='news'):
+    tags = process(s)
+    result = NV_Passive(tags)
+    sentence = ' '.join([wordtagpair[0] for wordtagpair in tags])
+    write(sentence,result)
+print('Finished!!!!!!')
